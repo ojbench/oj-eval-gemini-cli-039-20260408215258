@@ -30,6 +30,19 @@ private:
     std::vector<size_t> indptr;
     std::vector<size_t> indices;
     std::vector<T> data;
+
+    size_t find_pos(size_t start, size_t end, size_t j) const {
+        size_t l = start, r = end;
+        while (l < r) {
+            size_t mid = l + (r - l) / 2;
+            if (indices[mid] < j) {
+                l = mid + 1;
+            } else {
+                r = mid;
+            }
+        }
+        return l;
+    }
     
 public:
     // Assignment operators are deleted
@@ -87,8 +100,9 @@ public:
         if (i >= rows || j >= cols) throw invalid_index();
         size_t start = indptr[i];
         size_t end = indptr[i + 1];
-        for (size_t k = start; k < end; ++k) {
-            if (indices[k] == j) return data[k];
+        size_t pos = find_pos(start, end, j);
+        if (pos < end && indices[pos] == j) {
+            return data[pos];
         }
         return T();
     }
@@ -98,33 +112,17 @@ public:
         if (i >= rows || j >= cols) throw invalid_index();
         size_t start = indptr[i];
         size_t end = indptr[i + 1];
-        for (size_t k = start; k < end; ++k) {
-            if (indices[k] == j) {
-                if (value == T()) {
-                    // The problem says: "set(i,j,value) 无需删除元素。"
-                    // So we just update the value even if it's T().
-                    data[k] = value;
-                } else {
-                    data[k] = value;
-                }
-                return;
+        size_t pos = find_pos(start, end, j);
+        if (pos < end && indices[pos] == j) {
+            data[pos] = value;
+        } else {
+            indices.insert(indices.begin() + pos, j);
+            data.insert(data.begin() + pos, value);
+            for (size_t r = i + 1; r <= rows; ++r) {
+                indptr[r]++;
             }
-            if (indices[k] > j) {
-                indices.insert(indices.begin() + k, j);
-                data.insert(data.begin() + k, value);
-                for (size_t r = i + 1; r <= rows; ++r) {
-                    indptr[r]++;
-                }
-                non_zeros++;
-                return;
-            }
+            non_zeros++;
         }
-        indices.insert(indices.begin() + end, j);
-        data.insert(data.begin() + end, value);
-        for (size_t r = i + 1; r <= rows; ++r) {
-            indptr[r]++;
-        }
-        non_zeros++;
     }
 
     // Access CSR components
@@ -154,9 +152,11 @@ public:
         for (size_t i = 0; i < rows; ++i) {
             size_t start = indptr[i];
             size_t end = indptr[i + 1];
+            T sum = T();
             for (size_t k = start; k < end; ++k) {
-                res[i] = res[i] + data[k] * vec[indices[k]];
+                sum = sum + data[k] * vec[indices[k]];
             }
+            res[i] = sum;
         }
         return res;
     }
